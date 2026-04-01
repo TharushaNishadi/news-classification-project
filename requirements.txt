@@ -1,0 +1,7 @@
+streamlit
+pandas
+transformers
+torch
+torchvision
+openpyxl
+huggingface_hub

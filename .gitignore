@@ -1,0 +1,16 @@
+text-analytics-env/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+*.csv
+*.xlsx
+*.xls
+*.bin
+*.safetensors
+*.pt
+*.pth
+Model_Output/
+final_model/
+notebooks-*/
+data-*/
+.env
