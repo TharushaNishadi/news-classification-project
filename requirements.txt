@@ -1,7 +1,6 @@
 streamlit
 pandas
+openpyxl
 transformers
 torch
-torchvision
-openpyxl
-huggingface_hub
+pyarrow
