@@ -150,6 +150,45 @@ button:active {
     margin-bottom: 10px;
 }
 
+/* ===== SUGGESTED QUESTION BUTTONS ===== */
+
+.element-container:has(.suggested-marker) + div [data-testid="stButton"] > button {
+    background: transparent !important;
+    color: white !important;
+    border: 1px solid rgba(255, 255, 255, 0.35) !important;
+    border-radius: 10px !important;
+    padding: 8px 14px !important;
+    font-weight: 500 !important;
+    box-shadow: none !important;
+}
+
+.element-container:has(.suggested-marker) + div [data-testid="stButton"] > button:hover {
+    background: rgba(255,255,255,0.04) !important;
+    border: 1px solid rgba(255, 255, 255, 0.8) !important;
+    color: white !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+/* ===== QA HISTORY BOX ===== */
+.qa-history-box {
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 12px;
+    padding: 14px 16px;
+    margin-bottom: 12px;
+}
+
+.qa-question {
+    color: #f5f5f5;
+    margin-bottom: 8px;
+}
+
+.qa-answer {
+    color: #dcdcdc;
+    margin-top: 6px;
+}
+
 /* ===== TABS STYLE ===== */
 
 .stTabs [data-baseweb="tab"] {
@@ -171,13 +210,25 @@ input, textarea {
 }
 
 
-/* ===== HAMBURGER BUTTON ===== */
+/* ===== HEADER LAYOUT ===== */
+.header-banner {
+    margin-bottom: 10px;
+}
 
-.menu-btn {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    z-index: 999;
+/* Hamburger button aligned with title */
+div[data-testid="stButton"] > button[kind="secondary"],
+div[data-testid="stButton"] > button[kind="primary"] {
+    min-height: 48px;
+}
+
+/* Sidebar-style info panel below header */
+.sidebar-panel {
+    background: #0b0b0c;
+    border: 1px solid rgba(212,175,55,0.18);
+    border-radius: 14px;
+    padding: 18px 20px;
+    margin-bottom: 18px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.6);
 }
 
 /* ===== MENU PANEL ===== */

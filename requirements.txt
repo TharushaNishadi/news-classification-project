@@ -1,10 +1,10 @@
 streamlit
 pandas
-openpyxl
-transformers
-torch
-pyarrow
-wordcloud
 matplotlib
 seaborn
+wordcloud
+transformers
+torch
 scikit-learn
+openpyxl
+numpy
