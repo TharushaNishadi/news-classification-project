@@ -4,3 +4,7 @@ openpyxl
 transformers
 torch
 pyarrow
+wordcloud
+matplotlib
+seaborn
+scikit-learn
