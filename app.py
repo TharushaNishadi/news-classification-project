@@ -1,261 +1,601 @@
 import os
 import pandas as pd
 import streamlit as st
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+from transformers import pipeline
+from sklearn.feature_extraction.text import CountVectorizer
+import numpy as np
+import seaborn as sns
 
-# Configure environment for stable execution
+
+CATEGORY_COLORS = {
+    "Business": "#d4af37",          # gold
+    "Opinion": "#3b82f6",           # blue
+    "Political gossip": "#f97316",  # orange
+    "Sports": "#22c55e",            # green
+    "World news": "#a855f7"         # purple
+}
+
+# ---------------- ENV ----------------
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 os.environ["OMP_NUM_THREADS"] = "1"
 
+# ---------------- CSS ----------------
+def load_css():
+    with open("styles.css") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-# ------------------ MODEL LOADING ------------------
+# ---------------- MODELS ----------------
+@st.cache_data
+def load_data(file):
+    """Load CSV or Excel file and return DataFrame."""
+    try:
+        if file.name.endswith(".csv"):
+            df = pd.read_csv(file)
+        elif file.name.endswith(".xlsx"):
+            df = pd.read_excel(file)
+        else:
+            st.error("Unsupported file type!")
+            return None
+        if df.empty:
+            st.warning("Uploaded file is empty.")
+            return None
+        return df
+    except Exception as e:
+        st.error(f"Error loading file: {e}")
+        return None
 
 @st.cache_resource
 def load_classifier():
-    """Load fine-tuned classification model."""
-    from transformers import pipeline
-    return pipeline(
-        "text-classification",
-        model="Group-7/Assignment_1",
-        device=-1
-    )
+    """Load and return text classification model pipeline."""
+    try:
+        model = pipeline("text-classification", model="Group-7/Assignment_1")  # Replace with your model
+        return model
+    except Exception as e:
+        st.error(f"Failed to load model: {e}")
+        return None
 
+# ------------------ Initialize Session State ------------------
+if "data" not in st.session_state:
+    st.session_state["data"] = pd.DataFrame()
 
 @st.cache_resource
 def load_qa_pipeline():
-    """Load pre-trained question answering model."""
-    from transformers import pipeline
     return pipeline(
         "question-answering",
         model="distilbert-base-cased-distilled-squad",
         device=-1
     )
 
-
-# ------------------ DATA HANDLING ------------------
-
-def load_data(file):
-    """Read uploaded CSV or Excel file."""
-    try:
-        if file.name.endswith(".xlsx"):
-            return pd.read_excel(file)
-        if file.name.endswith(".csv"):
-            file.seek(0)
-            return pd.read_csv(file)
-
-        st.error("Please upload a CSV or Excel file.")
-        return None
-    except Exception:
-        st.error("There was an error reading the file.")
-        return None
-
-
-# ------------------ SESSION STATE ------------------
-
+# ---------------- STATE ----------------
 def init_state():
-    """Initialize session variables."""
-    if "data" not in st.session_state:
-        st.session_state["data"] = None
-    if "question_input" not in st.session_state:
-        st.session_state["question_input"] = ""
-    if "current_answer" not in st.session_state:
-        st.session_state["current_answer"] = ""
-    if "qa_history" not in st.session_state:
-        st.session_state["qa_history"] = []
-
+    st.session_state.setdefault("data", None)
+    st.session_state.setdefault("qa_history", [])
+    st.session_state.setdefault("question_input", "")
+    st.session_state.setdefault("current_answer", "")
 
 def set_question(q):
-    """Set question from suggested buttons."""
     st.session_state["question_input"] = q
 
-
-def clear_qa_history():
-    """Clear question history."""
+def clear_qa():
     st.session_state["qa_history"] = []
     st.session_state["current_answer"] = ""
     st.session_state["question_input"] = ""
 
+def plot_cooccurrence(texts, max_features=50):
+    # Convert text to term-document matrix
+    vectorizer = CountVectorizer(
+        max_features=max_features,
+        stop_words='english'
+    )
+    
+    X = vectorizer.fit_transform(texts)
+    
+    # Compute co-occurrence matrix
+    Xc = (X.T * X)
+    Xc.setdiag(0)  # remove self-cooccurrence
+    
+    # Convert to dense array
+    cooc_matrix = Xc.toarray()
+    
+    # Get feature names
+    words = vectorizer.get_feature_names_out()
+    
+    return cooc_matrix, words
 
-# ------------------ MAIN APPLICATION ------------------
+def get_top_keywords(df, category_col, text_col, top_n=10):
+    results = {}
 
+    for category in df[category_col].unique():
+        texts = df[df[category_col] == category][text_col].fillna("").astype(str)
+
+        if texts.empty:
+            continue
+
+        vectorizer = CountVectorizer(stop_words="english")
+        X = vectorizer.fit_transform(texts)
+
+        words = vectorizer.get_feature_names_out()
+        counts = X.toarray().sum(axis=0)
+
+        word_freq = dict(zip(words, counts))
+
+        # Sort and take top N
+        top_words = sorted(word_freq.items(), key=lambda x: x[1], reverse=True)[:top_n]
+
+        results[category] = top_words
+
+    return results
+
+# ---------------- MAIN ----------------
 def main():
-    st.set_page_config(page_title="News Analysis Tool", layout="wide")
+    st.set_page_config(layout="wide")
+    load_css()
     init_state()
 
-    # Sidebar
-    st.sidebar.title("About")
-    st.sidebar.write(
-        "This application classifies news articles and answers questions based on selected article content."
-    )
+    if "menu_open" not in st.session_state:
+        st.session_state["menu_open"] = False
 
-    st.sidebar.subheader("How to Use")
-    st.sidebar.write(
-        "1. Upload a CSV or Excel file in the News Classification tab\n"
-        "2. Review classification results\n"
-        "3. Use the Q&A tab to ask questions"
-    )
+    # ===== HEADER =====
+    st.markdown("""
+    <div class="header-banner">
+        <div class="header-title">News Analysis Tool</div>
+        <div class="header-sub">Classify news articles and perform question-answering</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.sidebar.subheader("Data Requirements")
-    st.sidebar.write(
-        "- File type: CSV or Excel\n"
-        "- Required column: content"
-    )
+    st.markdown('<div class="menu-btn">', unsafe_allow_html=True)
 
-    st.title("News Analysis Tool")
-    st.caption("Classify news articles and perform question-answering.")
+    if st.button("☰"):
+        st.session_state["menu_open"] = not st.session_state["menu_open"]
 
-    tab1, tab2 = st.tabs(["News Classification", "Ask Questions"])
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # ------------------ TAB 1: CLASSIFICATION ------------------
+    #--------------Layout-----------------#
+    if st.session_state["menu_open"]:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
 
-    with tab1:
-        st.subheader("Upload News File")
+        st.markdown('<div class="gold-text">About</div>', unsafe_allow_html=True)
+        st.write("This application classifies news articles and answers questions based on selected article content.")
 
-        # User instruction (important for usability)
-        st.write("Upload a CSV or Excel file that contains a column named `content`.")
+        st.markdown('<div class="gold-text">How to Use</div>', unsafe_allow_html=True)
+        st.write(
+            "1. Upload a CSV or Excel file in the News Classification tab\n"
+            "2. Review classification results\n"
+            "3. Use the Q&A tab to ask questions"
+        )
 
-        uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx"])
+        st.markdown('<div class="gold-text">Data Requirements</div>', unsafe_allow_html=True)
+        st.write("- File type: CSV or Excel\n- Required column: content")
 
-        if uploaded_file is not None:
-            df = load_data(uploaded_file)
+        st.markdown('</div>', unsafe_allow_html=True)
 
-            if df is None:
-                return
+    # ================= CENTER PANEL (EXPANDED) =================
+    center = st.container()
+    with center:
+        st.markdown('<div class="card">', unsafe_allow_html=True)
 
-            if "content" not in df.columns:
-                st.error("The uploaded file must contain a column named 'content'.")
-                return
+        tabs = st.tabs(["📁 News Classification", "💬 Ask Questions", "📊 Analytics"])
 
-            texts = df["content"].fillna("").astype(str).tolist()
+        # =====================================================
+        # 📁 TAB 1: CLASSIFICATION (FULL ORIGINAL LOGIC)
+        # =====================================================
+        with tabs[0]:
+            # ================= FEATURED CATEGORIES =================
+            st.markdown("""
+            <div style="
+                font-size:28px;
+                font-weight:800;
+                margin-bottom:15px;
+                background: linear-gradient(135deg, #d4af37, #ffcc70, #b8860b);
+                -webkit-background-clip: text;
+                -webkit-text-fill-color: transparent;">
+                Featured Categories
+            </div>
+            """, unsafe_allow_html=True)
 
-            with st.spinner("Classifying articles..."):
-                model = load_classifier()
-                predictions = model(texts)
+            # --- CARD DATA ---
+            categories_ui = [
+                {
+                    "name": "Business",
+                    "desc": "Markets, companies, and financial updates",
+                    "img": "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40"
+                    },
+                    {
+                        "name": "Opinion",
+                        "desc": "Editorials and expert perspectives",
+                        "img": "https://images.unsplash.com/photo-1504711434969-e33886168f5c"
+                    },
+                    {
+                        "name": "Political gossip",
+                        "desc": "Inside stories from politics",
+                        "img": "https://images.unsplash.com/photo-1529107386315-e1a2ed48a620"
+                    },
+                    {
+                        "name": "Sports",
+                        "desc": "Matches, players, and highlights",
+                        "img": "https://images.unsplash.com/photo-1517649763962-0c623066013b?crop=entropy&cs=tinysrgb&fit=crop&w=400&q=80"
+                    },
+                    {
+                        "name": "World news",
+                        "desc": "Global headlines and events",
+                        "img": "https://images.unsplash.com/photo-1467269204594-9661b134dd2b"
+                    }
+            ]
 
-            # Map model labels to category names
-            label_map = {
-                "LABEL_0": "Business",
-                "LABEL_1": "Opinion",
-                "LABEL_2": "Political gossip",
-                "LABEL_3": "Sports",
-                "LABEL_4": "World news"
-            }
+            # --- GRID ---
+            cols = st.columns(5)
 
-            categories = [label_map.get(p["label"], p["label"]) for p in predictions]
-            confidence = [round(p["score"] * 100, 2) for p in predictions]
-
-            # Prepare display table
-            display_df = df.copy()
-            display_df.rename(columns={"content": "News Content"}, inplace=True)
-            display_df["Category"] = categories
-            display_df["Confidence (%)"] = confidence
-
-            # Prepare output file
-            output_df = df.copy()
-            output_df["class"] = categories
-
-            st.session_state["data"] = display_df
-
-            # Summary metrics
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Total Articles", len(df))
-            col2.metric("Categories", len(set(categories)))
-            col3.metric("Avg Confidence", f"{round(sum(confidence)/len(confidence),2)}%")
-
-            st.subheader("Results")
-            st.dataframe(display_df, use_container_width=True)
-
-            st.subheader("Category Distribution")
-            st.table(pd.Series(categories).value_counts())
-
-            # Download classified output
-            st.download_button(
-                "Download Output",
-                output_df.to_csv(index=False).encode("utf-8-sig"),
-                "output.csv",
-                "text/csv"
-            )
-
-    # ------------------ TAB 2: QUESTION ANSWERING ------------------
-
-    with tab2:
-        st.subheader("Ask Questions from News Articles")
-
-        if st.session_state["data"] is None:
-            st.info("Please upload and classify data first.")
-            return
-
-        df = st.session_state["data"]
-        articles = df["News Content"].fillna("").astype(str).tolist()
-
-        article = st.selectbox("Select Article", articles)
-
-        st.write("Suggested Questions")
-
-        # Suggested question buttons
-        c1, c2, c3, c4 = st.columns(4)
-        c1.button("What is the main event?", on_click=set_question, args=("What is the main event?",))
-        c2.button("Who is involved?", on_click=set_question, args=("Who is involved?",))
-        c3.button("When did it happen?", on_click=set_question, args=("When did it happen?",))
-        c4.button("Where did it happen?", on_click=set_question, args=("Where did it happen?",))
-
-        # Question input
-        st.text_input("Enter your question", key="question_input")
-
-        colA, colB = st.columns(2)
-
-        with colA:
-            get_answer = st.button("Get Answer", use_container_width=True)
-
-        with colB:
-            st.button("Clear History", use_container_width=True, on_click=clear_qa_history)
-
-        # Generate answer
-        if get_answer:
-            question = st.session_state["question_input"].strip()
-
-            if question == "":
-                st.warning("Please enter a question.")
-            else:
-                with st.spinner("Generating answer..."):
-                    qa = load_qa_pipeline()
-                    result = qa({
-                        "question": question,
-                        "context": article
-                    })
-                    answer = result["answer"]
-
-                st.session_state["current_answer"] = answer
-                st.session_state["qa_history"].append({
-                    "question": question,
-                    "answer": answer
-                })
-
-        # Display answer
-        if st.session_state["current_answer"]:
-            st.subheader("Answer")
-            st.markdown(
-                f"<div style='background:#1f2937;padding:15px;border-radius:8px;'>{st.session_state['current_answer']}</div>",
-                unsafe_allow_html=True
-            )
-
-        # Display question history
-        if st.session_state["qa_history"]:
-            st.subheader("Question History")
-
-            for i, item in enumerate(st.session_state["qa_history"], start=1):
-                st.markdown(
-                    f"""
-                    <div style="background:#111827;padding:15px;border-radius:8px;margin-bottom:10px;">
-                        <strong>Question {i}:</strong> {item["question"]}<br>
-                        <strong>Answer:</strong> {item["answer"]}
+            for i, cat in enumerate(categories_ui):
+                with cols[i]:
+                    st.markdown(f"""
+                    <div class="category-card">
+                        <img src="{cat['img']}" class="category-img"/>
+                        <div class="category-title">{cat['name']}</div>
+                        <div class="category-desc">{cat['desc']}</div>
+                    
                     </div>
-                    """,
-                    unsafe_allow_html=True
+                    """, unsafe_allow_html=True)   
+            st.subheader("Upload News File")
+            st.write("Upload a CSV or Excel file that contains a column named `content`.")
+
+            uploaded_file = st.file_uploader("Choose a file", type=["csv", "xlsx"])
+
+            if uploaded_file is not None:
+                df = load_data(uploaded_file)
+                if df is None:
+                    st.stop()  # Stop execution if loading failed
+
+                # Normalize columns: strip whitespace + lowercase
+                df.columns = [col.strip().lower() for col in df.columns]
+
+                if "content" not in df.columns:
+                    st.error("The uploaded file must contain a column named 'content' (case-insensitive).")
+                    st.stop()
+
+                texts = df["content"].fillna("").astype(str).tolist()
+
+                # Load model and classify
+                with st.spinner("Classifying articles..."):
+                    model = load_classifier()
+                    if model is None:
+                        st.stop()
+
+                    predictions = []
+                    for i, text in enumerate(texts):
+                        try:
+                            pred = model(text)[0]
+                            predictions.append(pred)
+                        except Exception as e:
+                            st.warning(f"Failed to classify article {i}: {e}")
+                            predictions.append({"label": "ERROR", "score": 0})
+
+                # Map model labels to category names
+                label_map = {
+                    "LABEL_0": "Business",
+                    "LABEL_1": "Opinion",
+                    "LABEL_2": "Political gossip",
+                    "LABEL_3": "Sports",
+                    "LABEL_4": "World news"
+                }
+
+                categories = [label_map.get(p["label"], p["label"]) for p in predictions]
+                confidence = [round(p["score"] * 100, 2) for p in predictions]
+
+                # Prepare display table
+                display_df = df.copy()
+                display_df.rename(columns={"content": "News Content"}, inplace=True)
+                display_df["Category"] = categories
+                display_df["Confidence (%)"] = confidence
+
+                # Prepare downloadable output
+                output_df = df.copy()
+                output_df["class"] = categories
+
+                st.session_state["data"] = display_df
+
+                # ------------------ Summary Metrics ------------------
+                col1, col2, col3 = st.columns(3)
+                col1.metric("Total Articles", len(df))
+                col2.metric("Categories", len(set(categories)))
+                col3.metric("Avg Confidence", f"{round(sum(confidence)/len(confidence),2)}%")
+
+                # ------------------ Results ------------------
+                st.subheader("Results")
+                st.dataframe(display_df, use_container_width=True)
+
+                st.subheader("Category Distribution")
+                st.table(pd.Series(categories).value_counts())
+
+                # ------------------ Download Button ------------------
+                
+                st.download_button(
+                    "Download Classified Output",
+                    output_df.to_csv(index=False).encode("utf-8-sig"),
+                    "classified_news.csv",
+                    "text/csv",
+                    use_container_width=True
+                    )
+
+                
+
+        # =====================================================
+        # 💬 TAB 2: Q&A (FULL ORIGINAL LOGIC)
+        # =====================================================
+        with tabs[1]:
+            if st.session_state["data"] is None or st.session_state["data"].empty:
+                st.info("Please upload a CSV or Excel file.")
+            else:
+                df_display = st.session_state["data"]
+                if "News Content" not in df_display.columns:
+                    st.error("Column 'News Content' not found. Please upload and process data first.")
+                    st.stop()
+
+                articles = df_display["News Content"].fillna("").astype(str)
+                article = st.selectbox("Select Article", articles)
+
+                st.write("Suggested Questions")
+
+                c1, c2, c3, c4 = st.columns(4)
+                c1.button("What is the main event?", on_click=set_question, args=("What is the main event?",))
+                c2.button("Who is involved?", on_click=set_question, args=("Who is involved?",))
+                c3.button("When did it happen?", on_click=set_question, args=("When did it happen?",))
+                c4.button("Where did it happen?", on_click=set_question, args=("Where did it happen?",))
+
+                st.text_input("Enter question", key="question_input")
+
+                colA, colB = st.columns(2)
+                with colA:
+                    ask = st.button("Get Answer")
+                with colB:
+                    st.button("Clear History", on_click=clear_qa)
+
+                if ask:
+                    q = st.session_state["question_input"].strip()
+                    if q:
+                        with st.spinner("Thinking..."):
+                            qa = load_qa_pipeline()
+                            res = qa({"question": q, "context": article})
+
+                        st.session_state["current_answer"] = res["answer"]
+                        st.session_state["qa_history"].append({
+                            "question": q,
+                            "answer": res["answer"]
+                        })
+
+                if st.session_state["current_answer"]:
+                    st.success(st.session_state["current_answer"])
+
+                if st.session_state["qa_history"]:
+                    st.subheader("History")
+                    for item in st.session_state["qa_history"]:
+                        st.write(f"Q: {item['question']}")
+                        st.write(f"A: {item['answer']}")
+
+        # =====================================================
+        # 📊 TAB 3: ANALYTICS (FULL ORIGINAL LOGIC)
+        # =====================================================
+        with tabs[2]:
+            if st.session_state["data"] is None or st.session_state["data"].empty:
+                st.info("Please upload a CSV or Excel file.")
+            else:
+                df_display = st.session_state["data"]
+                # CHECK COLUMN EXISTS
+                if "News Content" not in df_display.columns:
+                    st.error("Column 'News Content' not found.")
+                    st.stop()
+                df = df_display
+                st.subheader("Search & Filter")
+
+                # Search input
+                query = st.text_input("Search keyword")
+
+                # Category filter (multi-select = better)
+                selected_categories = st.multiselect(
+                    "Select Category",
+                    options=df["Category"].unique(),
+                    default=df["Category"].unique()
                 )
 
+                # Start with full data
+                filtered_df = df.copy()
 
-# ------------------ RUN APP ------------------
+                # Apply category filter
+                filtered_df = filtered_df[filtered_df["Category"].isin(selected_categories)]
 
+                # Apply search filter
+                if query:
+                    filtered_df = filtered_df[
+                    filtered_df["News Content"].str.contains(query, case=False, na=False)
+                ]
+
+                # Show results
+                st.subheader("Preview of your filtered data")
+                st.dataframe(filtered_df, use_container_width=True)
+
+                
+                #-----------------Download-------------#
+                st.subheader("Download Filtered Data")
+
+                col_csv, col_json = st.columns(2)
+
+                with col_csv:
+                    st.download_button(
+                        "📄 Download as CSV",
+                        filtered_df.to_csv(index=False).encode("utf-8-sig"),
+                        "filtered_data.csv",
+                        use_container_width=True
+                    )
+
+                with col_json:
+                    st.download_button(
+                        "🧾 Download as JSON",
+                        filtered_df.to_json(orient="records", indent=2).encode("utf-8"),
+                        "filtered_data.json",
+                        use_container_width=True
+                )
+                #-------------------Visuals----------------#
+                col1, col2 = st.columns(2)
+                # WordCloud
+                with col1:
+                    with st.container():
+                        st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
+        
+                        st.markdown("#### Word Cloud")
+        
+                        text = " ".join(df_display["News Content"].fillna("").astype(str).tolist())
+                        wc = WordCloud(width=500, height=500, background_color="black").generate(text)
+
+                        fig, ax = plt.subplots(figsize=(5, 3))
+                        ax.imshow(wc)
+                        ax.axis("off")
+
+                        st.pyplot(fig)
+
+                        st.markdown('</div>', unsafe_allow_html=True)
+
+                # HEATMAP CARD
+                with col2:
+                    with st.container():
+                        st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
+
+                        st.markdown("#### Heatmap")
+
+                        texts = df_display["News Content"].fillna("").astype(str).tolist()
+                        cooc_matrix, words = plot_cooccurrence(texts)
+
+                        cooc_df = pd.DataFrame(cooc_matrix, index=words, columns=words)
+
+                        fig, ax = plt.subplots(figsize=(5, 3))
+                        fig.patch.set_facecolor("black")
+                        ax.set_facecolor("black")
+                        
+                        sns.heatmap(cooc_df, cmap="coolwarm", square=True, ax=ax, cbar=False)
+                        ax.tick_params(axis='x',colors='white', labelsize=6)
+                        ax.tick_params(axis='y',colors='white', labelsize=6)
+                        st.pyplot(fig)
+
+                        st.markdown('</div>', unsafe_allow_html=True)
+
+                st.markdown("### Top Keywords by Category")
+
+                top_keywords = get_top_keywords(df_display, "Category", "News Content", top_n=5)
+
+                cols = st.columns(5)
+
+                for i, (category, words) in enumerate(top_keywords.items()):
+                    with cols[i]:
+                        with st.container():
+                            st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
+
+                            st.markdown(f"#### {category}")
+
+                            if words:
+                                words_df = pd.DataFrame(words, columns=["Word", "Freq"])
+
+                                fig, ax = plt.subplots(figsize=(3, 4))
+                                fig.patch.set_facecolor("black")
+                                ax.set_facecolor("black")
+                                color = CATEGORY_COLORS.get(category, "#ffffff")
+
+                                ax.bar(words_df["Word"], words_df["Freq"], color=color)
+
+                                ax.tick_params(axis='x',colors='white', rotation=45, labelsize=6)
+                                ax.tick_params(axis='y',colors='white', labelsize=6)
+
+                                
+
+                                st.pyplot(fig)
+
+                            st.markdown('</div>', unsafe_allow_html=True)
+                
+                
+                st.markdown("### Summary Charts")
+
+                col1, col2 = st.columns(2)
+
+                # PIE CHART
+                with col1:
+                    with st.container():
+                        st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
+
+                        st.markdown("#### Category Distribution")
+
+                        counts = df["Category"].value_counts()
+                        colors = [CATEGORY_COLORS.get(cat, "#ffffff") for cat in counts.index]
+                        fig2, ax2 = plt.subplots(figsize=(4, 5))
+                
+                        wedges, _ = ax2.pie(counts, colors=colors, startangle=90)
+                        fig2.patch.set_facecolor('black')
+                        ax2.set_facecolor('black')
+
+                        # Get total of counts
+                        counts = df["Category"].value_counts()
+                        total = counts.sum()
+
+                        # Create legend labels with percentages
+                        legend_labels = [f"{category} ({count/total*100:.1f}%)" for category, count in zip(counts.index, counts.values)]
+                        colors = [CATEGORY_COLORS.get(cat, "#ffffff") for cat in counts.index]
+                        # Create pie chart without percentages
+                        wedges, texts = ax2.pie(
+                            counts,
+                            autopct=None,  # Remove percentages from pie
+                            textprops={'color': 'white', 'fontsize': 9},
+                            colors=colors,
+                            startangle=90,
+                            labels=None  # No labels on the pie
+                        )
+
+                        
+                        # Add legend with percentages
+                        ax2.legend(
+                            wedges, 
+                            legend_labels,  
+                            title="Categories",
+                            loc="center left",
+                            bbox_to_anchor=(1, 0, 0.5, 1),
+                            facecolor='black',
+                            edgecolor='white',
+                            labelcolor='white',
+                            fontsize=16
+                        )
+                        ax2.get_legend().get_title().set_color('white')
+                        st.markdown('</div>', unsafe_allow_html=True)
+
+
+                        # Ensure pie is circular
+                        ax2.axis('equal')
+
+                        st.pyplot(fig2)
+                #------------------- CONFIDENCE BAR-------------#
+                with col2:
+                    with st.container():
+                        st.markdown('<div class="dashboard-card">', unsafe_allow_html=True)
+
+                        st.markdown("#### Confidence by Category")
+                        conf_df = df.groupby("Category")["Confidence (%)"].mean()
+
+
+                        fig_conf, ax_conf = plt.subplots(figsize=(4, 3))
+                         
+                        colors = [CATEGORY_COLORS.get(cat, "#ffffff") for cat in counts.index]
+                        ax_conf.bar(conf_df.index, conf_df.values, color=colors)
+
+                        ax_conf.set_facecolor("black")
+                        fig_conf.patch.set_facecolor("black")
+
+                        ax_conf.tick_params(axis='x', colors='white', rotation=30)
+                        ax_conf.tick_params(axis='y', colors='white')
+
+                        
+
+                        st.pyplot(fig_conf)
+                        st.markdown('</div>', unsafe_allow_html=True)
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# ---------------- RUN ----------------
 if __name__ == "__main__":
     main()
