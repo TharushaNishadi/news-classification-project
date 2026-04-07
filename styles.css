@@ -1,4 +1,4 @@
-/* ===== GLOBAL DARK GOLD THEME ===== */
+/* GLOBAL DARK GOLD THEME */
 
 :root {
     --bg: #050505;
@@ -23,28 +23,31 @@
     padding-top: 1.5rem;
 }
 
-/* ===== HEADER ===== */
+/* HEADER */
 
 .header-banner {
-    background: linear-gradient(135deg, #000000, #3a2a1a);
-    padding: 20px;
-    border-radius: 12px;
-    margin-bottom: 20px;
+    padding: 18px 25px;
+    border-radius: 14px;
+    background: linear-gradient(90deg, #111111 0%, #1c1c1c 60%, rgba(212,175,55,0.25) 100%);
+    margin-bottom: 15px;
+    border: none !important;
+    box-shadow: none !important;
 }
 
 .header-title {
-    font-size: 32px;
+    font-size: 34px;
     font-weight: 800;
-    background: var(--gold);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+    color: #d4af37;
+    letter-spacing: 0.3px;
 }
 
 .header-sub {
-    color: var(--muted);
+    font-size: 14px;
+    color: #cfcfcf;
+    margin-top: 6px;
 }
 
-/* ===== CARDS ===== */
+/* CARDS */
 
 .card {
     background: var(--card);
@@ -60,15 +63,15 @@
     box-shadow: 0 20px 50px rgba(212,175,55,0.2);
 }
 
-/* ===== GOLD TEXT ===== */
+/* GOLD TEXT */
 
 .gold-text {
     color: var(--gold-solid);
     font-weight: 600;
 }
 
-/* ===== BUTTON ===== */
-/* ===== FILE UPLOADER BUTTON ===== */
+/* BUTTON */
+/* File Uploader Button */
 
 [data-testid="stFileUploader"] section {
     border: 2px dashed rgba(212,175,55,0.5) !important;
@@ -122,7 +125,7 @@ button:active {
     box-shadow: 0 0 20px rgba(212,175,55,0.6);
 }
 
-/* ===== UPLOAD AREA ===== */
+/* UPLOAD AREA */
 
 .upload-box {
     border: 2px dashed rgba(212,175,55,0.5);
@@ -133,7 +136,7 @@ button:active {
     background: radial-gradient(circle, rgba(212,175,55,0.08), transparent);
 }
 
-/* ===== CHAT ===== */
+/* CHAT */
 
 .chat-user {
     background: rgba(212,175,55,0.15);
@@ -150,7 +153,7 @@ button:active {
     margin-bottom: 10px;
 }
 
-/* ===== SUGGESTED QUESTION BUTTONS ===== */
+/* SUGGESTED QUESTION BUTTONS */
 
 .element-container:has(.suggested-marker) + div [data-testid="stButton"] > button {
     background: transparent !important;
@@ -170,7 +173,7 @@ button:active {
     transform: none !important;
 }
 
-/* ===== QA HISTORY BOX ===== */
+/* QA HISTORY BOX */
 .qa-history-box {
     border: 1px solid rgba(255, 255, 255, 0.18);
     background: rgba(255, 255, 255, 0.03);
@@ -189,7 +192,7 @@ button:active {
     margin-top: 6px;
 }
 
-/* ===== TABS STYLE ===== */
+/* TABS STYLE */
 
 .stTabs [data-baseweb="tab"] {
     border-radius: 8px;
@@ -201,7 +204,7 @@ button:active {
     color: black !important;
 }
 
-/* ===== INPUTS ===== */
+/* INPUTS */
 
 input, textarea {
     background: #111 !important;
@@ -209,19 +212,7 @@ input, textarea {
     border: 1px solid rgba(212,175,55,0.3);
 }
 
-
-/* ===== HEADER LAYOUT ===== */
-.header-banner {
-    margin-bottom: 10px;
-}
-
-/* Hamburger button aligned with title */
-div[data-testid="stButton"] > button[kind="secondary"],
-div[data-testid="stButton"] > button[kind="primary"] {
-    min-height: 48px;
-}
-
-/* Sidebar-style info panel below header */
+/* Sidebar-style info panel */
 .sidebar-panel {
     background: #0b0b0c;
     border: 1px solid rgba(212,175,55,0.18);
@@ -231,7 +222,7 @@ div[data-testid="stButton"] > button[kind="primary"] {
     box-shadow: 0 10px 25px rgba(0,0,0,0.6);
 }
 
-/* ===== MENU PANEL ===== */
+/* MENU PANEL */
 
 .card {
     animation: slideDown 0.3s ease;
@@ -248,7 +239,7 @@ div[data-testid="stButton"] > button[kind="primary"] {
     }
 }
 
-/* ===== FEATURED CATEGORIES ===== */
+/* FEATURED CATEGORIES */
 
 .section-title {
     font-size: 26px;
@@ -329,7 +320,7 @@ div[data-testid="stButton"] > button[kind="primary"] {
     box-shadow: 0 0 15px rgba(212,175,55,0.7);
 }
 
-/* Title under image - premium style */
+/* Title under image */
 .category-title {
     font-size: 16px;
     font-weight: 800;
@@ -355,7 +346,7 @@ div[data-testid="stButton"] > button[kind="primary"] {
     transform: translateY(-2px);
 }
 
-/* ===== DASHBOARD SMALL CARD ===== */
+/* DASHBOARD SMALL CARD */
 .dashboard-card {
     background: #0b0b0c;
     border-radius: 14px;
@@ -365,9 +356,45 @@ div[data-testid="stButton"] > button[kind="primary"] {
     box-shadow: 0 10px 20px rgba(0,0,0,0.6);
 }
 
-/* GOLD HOVER EFFECT (same style as category cards) */
+/* GOLD HOVER EFFECT */
 .dashboard-card:hover {
     transform: scale(1.03);
     box-shadow: 0 0 25px rgba(212,175,55,0.5);
     border-color: #d4af37;
+}
+
+.menu-wrapper button {
+    background: transparent !important;
+    border: none !important;
+    color: #d4af37 !important;
+    font-size: 26px !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin-top: 4px !important;
+}
+
+.menu-btn button:hover {
+    background: transparent !important;
+    color: #ffcc70 !important;
+    border: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+.menu-wrapper {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    margin-top: 6px;
+}
+
+/* REMOVE background from left column completely */
+div[data-testid="column"]:first-child {
+    background: transparent !important;
+    padding-top: 12px !important;
+}
+
+/* Make columns visually merge */
+div[data-testid="horizontalBlock"] {
+    background: transparent !important;
 }

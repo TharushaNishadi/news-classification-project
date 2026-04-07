@@ -52,7 +52,11 @@ def load_data(file):
 def load_classifier():
     """Load and return text classification model pipeline."""
     try:
-        model = pipeline("text-classification", model="Group-7/Assignment_1")  
+        model = pipeline(
+            "text-classification",
+            model="Group-7/Assignment_1",
+            device=-1
+        )
         return model
     except Exception as e:
         st.error(f"Failed to load model: {e}")
@@ -136,23 +140,23 @@ def main():
     load_css()
     init_state()
 
-    qa = load_qa_pipeline()
-
     if "menu_open" not in st.session_state:
         st.session_state["menu_open"] = False
 
     # ---------------- HEADER ----------------
-    header_col1, header_col2 = st.columns([1, 14])
+    header_col1, header_col2 = st.columns([1, 11])
 
     with header_col1:
+        st.markdown('<div class="menu-wrapper">', unsafe_allow_html=True)
         if st.button("☰", key="menu_toggle_btn"):
             st.session_state["menu_open"] = not st.session_state["menu_open"]
+        st.markdown('</div>', unsafe_allow_html=True)
 
     with header_col2:
         st.markdown("""
         <div class="header-banner">
             <div class="header-title">News Analysis Tool</div>
-            <div class="header-sub">Smart News Classification & Question Answering</div>
+            <div class="header-sub">Classify news articles and perform question-answering</div>
         </div>
         """, unsafe_allow_html=True)
 
@@ -182,9 +186,7 @@ def main():
 
         tabs = st.tabs(["📁 News Classification", "💬 Ask Questions", "📊 Analytics"])
 
-        # =====================================================
-        # 📁 TAB 1: CLASSIFICATION (FULL ORIGINAL LOGIC)
-        # =====================================================
+        # TAB 1: CLASSIFICATION (FULL ORIGINAL LOGIC)
         with tabs[0]:
             # ================= FEATURED CATEGORIES =================
             st.markdown("""
@@ -277,14 +279,12 @@ def main():
                     if model is None:
                         st.stop()
 
-                    predictions = []
-                    for i, text in enumerate(texts):
-                        try:
-                            pred = model(text)[0]
-                            predictions.append(pred)
-                        except Exception as e:
-                            st.warning(f"Failed to classify article {i}: {e}")
-                            predictions.append({"label": "ERROR", "score": 0})
+                    try:
+                        raw_preds = model(texts)
+                        predictions = [p[0] if isinstance(p, list) else p for p in raw_preds]
+                    except Exception as e:
+                        st.error(f"Batch classification failed: {e}")
+                        predictions = [{"label": "ERROR", "score": 0}] * len(texts)
 
                 # Map model labels to category names
                 label_map = {
@@ -333,9 +333,7 @@ def main():
                 )
 
                 
-
-        # =====================================================
-        # 💬 TAB 2: Q&A
+        # TAB 2: Q&A
         with tabs[1]:
 
             if st.session_state["data"] is None or st.session_state["data"].empty:
@@ -351,7 +349,9 @@ def main():
                 articles = df_display["News Content"].fillna("").astype(str).tolist()
                 article = st.selectbox("Select Article", articles)
 
-                def run_suggested_question(question, article, qa):
+                def run_suggested_question(question, article):
+                    qa = load_qa_pipeline()
+
                     with st.spinner("Thinking..."):
                         res = qa({"question": question, "context": article})
 
@@ -372,16 +372,16 @@ def main():
                 c1, c2, c3, c4 = st.columns(4)
 
                 if c1.button("What is the main event?", key="q1"):
-                    run_suggested_question("What is the main event?", article, qa)
+                    run_suggested_question("What is the main event?", article)
 
                 if c2.button("Who is involved?", key="q2"):
-                    run_suggested_question("Who is involved?", article, qa)
+                    run_suggested_question("Who is involved?", article)
 
                 if c3.button("When did it happen?", key="q3"):
-                    run_suggested_question("When did it happen?", article, qa)
+                    run_suggested_question("When did it happen?", article)
 
                 if c4.button("Where did it happen?", key="q4"):
-                    run_suggested_question("Where did it happen?", article, qa)
+                    run_suggested_question("Where did it happen?", article)
 
                 st.text_input("Enter question", key="question_input")
 
@@ -397,6 +397,8 @@ def main():
                     q = st.session_state["question_input"].strip()
 
                     if q:
+                        qa = load_qa_pipeline()
+                        
                         with st.spinner("Thinking..."):
                             res = qa({"question": q, "context": article})
 
@@ -426,9 +428,8 @@ def main():
                         </div>
                         """, unsafe_allow_html=True)
 
-        # =====================================================
-        # 📊 TAB 3: ANALYTICS (FULL ORIGINAL LOGIC)
-        # =====================================================
+
+        # TAB 3: ANALYTICS 
         with tabs[2]:
             if st.session_state["data"] is None or st.session_state["data"].empty:
                 st.info("Please upload a CSV or Excel file.")
